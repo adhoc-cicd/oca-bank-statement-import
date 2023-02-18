@@ -3,7 +3,8 @@
 
 import logging
 
-from odoo import fields, models
+from odoo import _, fields, models
+from odoo.exceptions import UserError
 
 _logger = logging.getLogger(__name__)
 
@@ -29,8 +30,8 @@ class AccountStatementImport(models.TransientModel):
         try:
             Parser = self.env["account.statement.import.sheet.parser"]
             return Parser.parse(data_file, self.sheet_mapping_id)
-        except BaseException:
+        except BaseException as exc:
             if self.env.context.get("account_statement_import_txt_xlsx_test"):
                 raise
             _logger.warning("Sheet parser error", exc_info=True)
-        return super()._parse_file(data_file)
+            raise UserError(_("Bad file/mapping: ") + str(exc)) from exc
