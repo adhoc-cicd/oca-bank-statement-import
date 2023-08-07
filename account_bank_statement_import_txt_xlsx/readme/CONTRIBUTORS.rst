@@ -1,5 +1,6 @@
 * Alexis de Lattre <alexis.delattre@akretion.com>
 * Sebastien BEAU <sebastien.beau@akretion.com>
+* Mourad EL HADJ MIMOUNE <mourad.elhadj.mimoune@akretion.com>
 * Tecnativa (https://www.tecnativa.com)
 
   * Vicent Cubells <vicent.cubells@tecnativa.com>
@@ -13,3 +14,8 @@
 * `CorporateHub <https://corporatehub.eu/>`__
 
   * Alexey Pelykh <alexey.pelykh@corphub.eu>
+
+* ADHOC (https://www.adhoc.com.ar/)
+
+  * Juan Jose Scarafia <jjs@adhoc.com.ar>
+  * Katherine Zaoral <kz@adhoc.com.ar>
