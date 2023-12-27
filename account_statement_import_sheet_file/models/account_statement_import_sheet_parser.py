@@ -249,18 +249,18 @@ class AccountStatementImportSheetParser(models.TransientModel):
                 else currency_code
             )
 
-            def _decimal(column_name):
+            def _decimal(column_name, values):
                 if columns[column_name]:
                     return self._parse_decimal(
                         self._get_values_from_column(values, columns, column_name),
                         mapping,
                     )
 
-            amount = _decimal("amount_column")
+            amount = _decimal("amount_column", values)
             if not amount:
-                amount = abs(_decimal("amount_debit_column") or 0)
+                amount = abs(_decimal("amount_debit_column", values) or 0)
             if not amount:
-                amount = -abs(_decimal("amount_credit_column") or 0)
+                amount = -abs(_decimal("amount_credit_column", values) or 0)
 
             balance = (
                 self._get_values_from_column(values, columns, "balance_column")
@@ -320,6 +320,18 @@ class AccountStatementImportSheetParser(models.TransientModel):
                 else None
             )
 
+            debit_column = (
+                self._get_values_from_column(values, columns, "amount_debit_column")
+                if columns["amount_debit_column"]
+                else None
+            )
+
+            credit_column = (
+                self._get_values_from_column(values, columns, "amount_credit_column")
+                if columns["amount_credit_column"]
+                else None
+            )
+
             if currency != currency_code:
                 continue
 
@@ -335,6 +347,13 @@ class AccountStatementImportSheetParser(models.TransientModel):
                 amount = amount.copy_abs()
                 if debit_credit == mapping.debit_value:
                     amount = -amount
+
+            if debit_column and credit_column:
+                debit_amount = self._parse_decimal(debit_column, mapping)
+                debit_amount = debit_amount.copy_abs()
+                credit_amount = self._parse_decimal(credit_column, mapping)
+                credit_amount = credit_amount.copy_abs()
+                amount = -(credit_amount - debit_amount)
 
             if original_amount:
                 original_amount = self._parse_decimal(
