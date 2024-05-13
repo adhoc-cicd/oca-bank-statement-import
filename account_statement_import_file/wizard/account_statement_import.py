@@ -39,7 +39,13 @@ class AccountStatementImport(models.TransientModel):
                     "only contains already imported transactions."
                 )
             )
-        self.env["ir.attachment"].create(self._prepare_create_attachment(result))
+        attachment = self.env["ir.attachment"].create(
+            self._prepare_create_attachment(result)
+        )
+        statement = self.env["account.bank.statement"].browse(
+            result["statement_ids"][0]
+        )
+        statement.write({"attachment_ids": [(4, attachment.id)]})
         return result
 
     def import_file_button(self):
