@@ -494,7 +494,9 @@ class AccountStatementImportSheetParser(models.TransientModel):
         # decimal separator, and signs
         value = (
             re.sub(
-                r"[^\d\-+" + re.escape(thousands) + re.escape(decimal) + "]+", "", value
+                r"[^\d\-+" + re.escape(thousands) + re.escape(decimal) + "]+",
+                "",
+                str(value),
             )
             or "0"
         )
