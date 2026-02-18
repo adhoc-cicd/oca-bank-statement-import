@@ -10,8 +10,10 @@ import re
 from collections.abc import Iterable
 from datetime import datetime
 from decimal import Decimal
-from io import StringIO
+from io import BytesIO, StringIO
 from os import path
+
+import openpyxl
 
 from odoo import api, models
 from odoo.exceptions import UserError
@@ -48,9 +50,23 @@ class AccountStatementImportSheetParser(models.TransientModel):
         if header_line > 0:
             header_line -= 1
         if isinstance(csv_or_xlsx, tuple):
-            header = [
-                str(value).strip() for value in csv_or_xlsx[1].row_values(header_line)
-            ]
+            # Check if it's xlrd or openpyxl
+            if hasattr(csv_or_xlsx[1], "row_values"):
+                # xlrd workbook
+                header = [
+                    str(value).strip()
+                    for value in csv_or_xlsx[1].row_values(header_line)
+                ]
+            else:
+                # openpyxl workbook
+                sheet = csv_or_xlsx[1]
+                header_row = list(
+                    sheet.iter_rows(min_row=header_line + 1, max_row=header_line + 1)
+                )[0]
+                header = [
+                    str(cell.value).strip() if cell.value is not None else ""
+                    for cell in header_row
+                ]
         else:
             [next(csv_or_xlsx) for _i in range(header_line)]
             header = [value.strip() for value in next(csv_or_xlsx)]
@@ -149,6 +165,7 @@ class AccountStatementImportSheetParser(models.TransientModel):
 
     def _parse_lines(self, mapping, data_file, currency_code):
         columns = dict()
+        csv_or_xlsx = None
         try:
             workbook = xlrd.open_workbook(
                 file_contents=data_file,
@@ -160,24 +177,36 @@ class AccountStatementImportSheetParser(models.TransientModel):
                 workbook,
                 workbook.sheet_by_index(0),
             )
-        except xlrd.XLRDError:
-            csv_options = {}
-            csv_delimiter = mapping._get_column_delimiter_character()
-            if csv_delimiter:
-                csv_options["delimiter"] = csv_delimiter
-            if mapping.quotechar:
-                csv_options["quotechar"] = mapping.quotechar
+        except Exception:
             try:
-                decoded_file = data_file.decode(mapping.file_encoding or "utf-8")
-            except UnicodeDecodeError:
-                # Try auto guessing the format
-                detected_encoding = chardet.detect(data_file).get("encoding", False)
-                if not detected_encoding:
-                    raise UserError(
-                        self.env._("No valid encoding was found for the attached file")
-                    ) from None
-                decoded_file = data_file.decode(detected_encoding)
-            csv_or_xlsx = reader(StringIO(decoded_file), **csv_options)
+                workbook = openpyxl.load_workbook(
+                    filename=BytesIO(data_file),
+                    read_only=True,
+                    data_only=True,
+                )
+                sheet = workbook.active
+                csv_or_xlsx = (workbook, sheet)
+
+            except Exception:
+                csv_options = {}
+                csv_delimiter = mapping._get_column_delimiter_character()
+                if csv_delimiter:
+                    csv_options["delimiter"] = csv_delimiter
+                if mapping.quotechar:
+                    csv_options["quotechar"] = mapping.quotechar
+                try:
+                    decoded_file = data_file.decode(mapping.file_encoding or "utf-8")
+                except UnicodeDecodeError:
+                    # Try auto guessing the format
+                    detected_encoding = chardet.detect(data_file).get("encoding", False)
+                    if not detected_encoding:
+                        raise UserError(
+                            self.env._(
+                                "No valid encoding was found for the attached file"
+                            )
+                        ) from None
+                    decoded_file = data_file.decode(detected_encoding)
+                csv_or_xlsx = reader(StringIO(decoded_file), **csv_options)
         header = self.parse_header(csv_or_xlsx, mapping)
 
         # NOTE no seria necesario debit_column y credit_column ya que tenemos los
@@ -214,7 +243,14 @@ class AccountStatementImportSheetParser(models.TransientModel):
 
         # Get the numbers of rows of the file
         if isinstance(csv_or_xlsx, tuple):
-            numrows = csv_or_xlsx[1].nrows
+            sheet = csv_or_xlsx[1]
+            # Check if it's xlrd or openpyxl
+            if hasattr(sheet, "nrows"):
+                # xlrd
+                numrows = sheet.nrows
+            else:
+                # openpyxl
+                numrows = sheet.max_row
         else:
             numrows = len(str(data_file.strip()).split("\\n"))
 
@@ -232,12 +268,24 @@ class AccountStatementImportSheetParser(models.TransientModel):
                 book = csv_or_xlsx[0]
                 sheet = csv_or_xlsx[1]
                 values = []
-                for col_index in range(mapping.offset_column, sheet.row_len(row)):
-                    cell_type = sheet.cell_type(row, col_index)
-                    cell_value = sheet.cell_value(row, col_index)
-                    if cell_type == xlrd.XL_CELL_DATE:
-                        cell_value = xldate_as_datetime(cell_value, book.datemode)
-                    values.append(cell_value)
+                # Check if it's xlrd or openpyxl
+                if hasattr(sheet, "row_len"):
+                    # xlrd
+                    for col_index in range(mapping.offset_column, sheet.row_len(row)):
+                        cell_type = sheet.cell_type(row, col_index)
+                        cell_value = sheet.cell_value(row, col_index)
+                        if cell_type == xlrd.XL_CELL_DATE:
+                            cell_value = xldate_as_datetime(cell_value, book.datemode)
+                        values.append(cell_value)
+                else:
+                    # openpyxl
+                    row_data = list(sheet.iter_rows(min_row=row + 1, max_row=row + 1))[
+                        0
+                    ]
+                    for col_index, cell in enumerate(row_data):
+                        if col_index < mapping.offset_column:
+                            continue
+                        values.append(cell.value)
             else:
                 if index >= footer_line:
                     continue
