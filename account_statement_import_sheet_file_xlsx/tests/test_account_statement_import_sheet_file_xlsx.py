@@ -64,7 +64,7 @@ class TestAccountStatementImportSheetFileXlsx(
             ("ONE DECIMAL", 289400, 78.9),
             ("NO DECIMALS", 304102, 100),
         ]:
-            sheet.append([datetime(2026, 7, 1), label, reference, amount])
+            sheet.append([datetime(2026, 7, 1), label, reference, amount])  # noqa: DTZ001
             sheet.cell(row=sheet.max_row, column=4).number_format = "#.##0,00"
         buffer = BytesIO()
         workbook.save(buffer)
